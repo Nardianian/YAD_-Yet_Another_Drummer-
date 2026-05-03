@@ -4,7 +4,7 @@ Drummer Juce Sample Player
 WIP - Work In Progress, not tested.
 
 Thanks to Xander Brown for his XZ-Beats code here https://github.com/Xan1237/XZ-Beats 
-This repo was originally intended to be a fork of the Brown repo.
+This YAD! repo was originally intended to be a fork of the Brown repo.
 
 <img width="1128" height="848" alt="YAD!" src="https://github.com/user-attachments/assets/8983e232-1236-4179-a4fa-e86ca0869a5b" />
 
