@@ -39,7 +39,7 @@ public:
 
 	//==============================================================================
 	std::map<int, std::unique_ptr<ExtraArticulation>> extraMap;
-	// Memorizza fino a 5 percorsi file per ogni Pad (8 pad x 5 layer)
+	// Stores up to 5 file paths for each Pad (8 pads x 5 layers)
 	std::array<std::array<juce::File, 5>, NUM_SOUNDS> multiLayerFiles;
 	void triggerExtra(int midiNote, float velocity);
 	void loadExtraSample(int midiNote, int layer, const juce::File& file);
@@ -103,13 +103,13 @@ private:
 
 	struct DrumVoice
 	{
-		std::vector<DrumLayer> layers; // Supporto layer multipli (definiti dall'utente)
+		std::vector<DrumLayer> layers; // Multiple layer support (user defined)
 
 		int currentLayerIndex = -1;
 		int currentSampleIndex = 0;
 		bool isPlaying = false;
 		float triggerVelocity = 0.0f;
-		int routingMode = 0; // 0: Entrambi, 1: Solo Main, 2: Solo Direct
+		int routingMode = 0; // If 0: Both, 1: Main Only, 2: Direct Only
 		juce::String name;
 
 		void trigger(float vel)
