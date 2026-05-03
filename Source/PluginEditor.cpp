@@ -4,8 +4,8 @@
 class BorderlessButtonLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-	//override the drawButtonBackground method to not include a border
-	//this is to make sure they are invisible on top of the drum kit image
+	// Override the drawButtonBackground method to not include a border
+	// this is to make sure they are invisible on top of the drum kit image
 	void drawButtonBackground(juce::Graphics& g,
 		juce::Button& button,
 		const juce::Colour& backgroundColour,
@@ -141,32 +141,31 @@ void DrumSimulatorAudioProcessorEditor::paint(juce::Graphics& g)
 void DrumSimulatorAudioProcessorEditor::resized()
 {
 	auto bounds = getLocalBounds();
-	// Definiamo w e h per le coordinate dei pad
+	// Defines w and h for the pad coordinates
 	float w = (float)getWidth();
 	float h = (float)getHeight();
 
-	// 1. Pulsanti Kit a DESTRA (Uno sotto l'altro)
+	// 1. Load & Save Kit Buttons at the top right (one below the other)
 	auto rightTopArea = getLocalBounds().removeFromTop(80).removeFromRight(120).reduced(10);
 	saveKitButton->setBounds(rightTopArea.removeFromTop(30));
 	rightTopArea.removeFromTop(5); // Spazio tra i due
 	loadKitButton->setBounds(rightTopArea.removeFromTop(30));
 
-	// 2. Pulsante EXTRA MAP a SINISTRA
+	// 2. EXTRA MAP button on the left
 	auto leftTopArea = getLocalBounds().removeFromTop(80).removeFromLeft(120).reduced(10);
 	extraMapButton->setBounds(leftTopArea.removeFromTop(30));
 
-	// 2. Preleviamo lo spazio per le istruzioni dal fondo assoluto
+	// 3. Take space from the absolute bottom
 	instructionsLabel->setBounds(bounds.removeFromBottom(30));
 
-	// 3. Preleviamo lo spazio per il mixer (120px fisse)
+	// 4. Free up space for the mixer
 	auto mixerArea = bounds.removeFromBottom(120).reduced(10, 0);
 
-	// 4. L'area rimanente (bounds) è esattamente dove viene disegnata la batteria
-	// RIPRISTINO COORDINATE ORIGINALI (moltiplicate per h totale per mantenere il vecchio scaling)
-	float yOffset = 0.165f; // Il vecchio offset che funzionava
+	// 5. Remaining area (bounds) where the battery is drawn
+	float yOffset = 0.165f; 
 	float snareExtraJump = 0.045f;
 
-	// Coordinate Pad (Riferite alle dimensioni totali w e h)
+	// 6. Pad Coordinates (Referring to the total dimensions w and h)
 	drumPads[DrumSimulatorAudioProcessor::KICK].bounds = juce::Rectangle<int>(w * 0.511f, h * (0.593f - yOffset), w * 0.088f, w * 0.088f);
 	drumPads[DrumSimulatorAudioProcessor::SNARE].bounds = juce::Rectangle<int>(w * 0.661f, h * (0.530f - yOffset - snareExtraJump), w * 0.072f, w * 0.072f);
 	drumPads[DrumSimulatorAudioProcessor::HIHAT].bounds = juce::Rectangle<int>(w * 0.783f, h * (0.461f - yOffset), w * 0.066f, w * 0.066f);
@@ -179,7 +178,7 @@ void DrumSimulatorAudioProcessorEditor::resized()
 	for (auto& pad : drumPads)
 		if (pad.button != nullptr) pad.button->setBounds(pad.bounds);
 
-	// 3. DISPOSIZIONE COLONNE MIXER (Usiamo la mixerArea definita sopra)
+	// 7. Mixer Column Arrangement (Use the mixerArea defined above)
 	int columnWidth = mixerArea.getWidth() / 8;
 
 	for (int i = 0; i < DrumSimulatorAudioProcessor::NUM_SOUNDS; ++i)
@@ -216,7 +215,7 @@ void DrumSimulatorAudioProcessorEditor::setupDrumPad(int index, const juce::Stri
 	pad.keyBinding = key;
 	pad.drumIndex = index;
 
-	// 1. Inizializzazione Slider
+	// 1. Slider initialization
 	pad.gainSlider = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
 	pad.gainSlider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
 	pad.gainSlider->setRange(0.0, 2.0, 0.01);
@@ -226,10 +225,10 @@ void DrumSimulatorAudioProcessorEditor::setupDrumPad(int index, const juce::Stri
 	pad.gainSlider->setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::white.withAlpha(0.7f));
 	addAndMakeVisible(*pad.gainSlider);
 
-	// 2. Inizializzazione Pulsanti
+	// 2. Initializing Buttons
 	pad.button = std::make_unique<juce::TextButton>("");
 	pad.button->setButtonText("");
-	pad.button->setAlpha(0.0f); // Rende il bottone invisibile ma cliccabile
+	pad.button->setAlpha(0.0f); // Makes the button invisible but clickable
 	pad.button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
 	pad.button->addListener(this);
 	addAndMakeVisible(*pad.button);
@@ -244,7 +243,7 @@ void DrumSimulatorAudioProcessorEditor::setupDrumPad(int index, const juce::Stri
 	pad.outButton->addListener(this);
 	addAndMakeVisible(*pad.outButton);
 
-	// 3. Attachment al parametro (fondamentale farlo DOPO la creazione dello slider)
+	// 3. Attachment to the parameter
 	juce::String paramId;
 	switch (index)
 	{
@@ -264,26 +263,26 @@ void DrumSimulatorAudioProcessorEditor::setupDrumPad(int index, const juce::Stri
 
 void DrumSimulatorAudioProcessorEditor::drawDrumPad(juce::Graphics& g, const DrumPad& pad)
 {
-	// Usiamo un'area quadrata basata sulla larghezza per garantire un cerchio perfetto
+	// Use a square area based on width to ensure a perfect circle
 	auto size = juce::jmin(pad.bounds.getWidth(), pad.bounds.getHeight());
 	auto circleBounds = juce::Rectangle<float>((float)pad.bounds.getX(), (float)pad.bounds.getY(), (float)size, (float)size);
 
-	// 1. Sfondo del pad: Leggerissimo velo scuro per dare profondità (quasi invisibile)
+	// Pad Background: Very light dark veil to give depth (almost invisible)
 	g.setColour(juce::Colours::black.withAlpha(0.12f));
 	g.fillEllipse(circleBounds);
 
-	// 2. Overlay di pressione: Si illumina con il colore del pad solo quando clicchi o premi il tasto
+	// Pressure Overlay: Lights up in the pad color only when you click or press the key
 	if (pad.isPressed)
 	{
 		g.setColour(pad.padColor.withAlpha(0.45f));
 		g.fillEllipse(circleBounds);
 	}
 
-	// 3. Bordo sottile: l'unico elemento che definisce il pad sopra l'immagine della batteria
+	// Thin border: The only element that defines the pad above the drum image
 	g.setColour(pad.padColor.withAlpha(0.7f));
 	g.drawEllipse(circleBounds, 1.8f);
 
-	// 4. Indicatore caricamento campione (Pallino in alto a destra)
+	// Sample loading indicator (Dot in the upper right corner: red\green state)
 	auto statusColor = audioProcessor.isDrumLoaded(pad.drumIndex) ? juce::Colours::lime : juce::Colours::red;
 	g.setColour(statusColor.withAlpha(0.9f));
 	g.fillEllipse(circleBounds.getRight() - 12, circleBounds.getY() + 4, 7, 7);
@@ -306,7 +305,7 @@ void DrumSimulatorAudioProcessorEditor::loadSampleForDrum(int drumIndex)
 
 	for (int i = 0; i < 5; ++i)
 	{
-		// Controlliamo se il file esiste per quel layer specifico
+		// Check if the file exists for that specific layer
 		bool isLoaded = audioProcessor.multiLayerFiles[drumIndex][i].existsAsFile();
 
 		juce::String displayName = "Layer " + juce::String(i + 1);
@@ -348,7 +347,7 @@ bool DrumSimulatorAudioProcessorEditor::keyPressed(const juce::KeyPress& key, ju
 	}
 	if (key == juce::KeyPress::escapeKey)
 	{
-		// Esci senza bloccare il plugin
+		// Exit without blocking the plugin
 		return true;
 	}
 	return false;
@@ -373,7 +372,7 @@ void DrumSimulatorAudioProcessorEditor::timerCallback()
 
 void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 {
-	// 1. Controllo dei Pad (dentro il ciclo)
+	// 1. Pad Control
 	for (int i = 0; i < DrumSimulatorAudioProcessor::NUM_SOUNDS; ++i)
 	{
 		auto& pad = drumPads[i];
@@ -381,7 +380,7 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 		if (button == pad.button.get())
 		{
 			triggerDrumPad(i);
-			return; // Trovato, esci dalla funzione
+			return; //Found, exit function
 		}
 
 		if (button == pad.loadButton.get())
@@ -393,11 +392,11 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 		if (button == pad.outButton.get())
 		{
 			showOutMenu(i);
-			return; // Trovato, esci dalla funzione
+			return; // Found, exit function
 		}
 	}
 
-	// 2. Controllo Pulsante EXTRA MAP (Fuori dal ciclo, controllato una volta sola)
+	// 2. EXTRA MAP Button Control (Checked only once)
 	if (button == extraMapButton.get())
 	{
 		juce::PopupMenu m;
@@ -409,7 +408,7 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 			int startNote = 12 + (octave * 12);
 			for (int note = startNote; note < startNote + 12; ++note)
 			{
-				// --- Logica Reserved ---
+				// --- Reserved Logic ---
 				bool isStandardNote = false;
 				juce::String padName;
 				for (int i = 0; i < DrumSimulatorAudioProcessor::NUM_SOUNDS; ++i) {
@@ -423,7 +422,7 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 				juce::String noteName = juce::MidiMessage::getMidiNoteName(note, true, true, 3);
 
 				if (isStandardNote) {
-					// Se la nota è riservata, aggiungiamo la riga disabilitata e passiamo alla prossima nota
+					// If the note is reserved, add the disabled line and move to the next note
 					sub.addItem(0, noteName + ": [RESERVED FOR " + padName + "]", false);
 					continue;
 				} // --- Reserved Logic End ---  
@@ -486,7 +485,7 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 		return;
 	}
 
-	// 3. Controllo Pulsanti Globali (SAVE/LOAD KIT)
+	// 3. Global Buttons Control (SAVE/LOAD KIT)
 	if (button == saveKitButton.get())
 	{
 		fileChooser = std::make_unique<juce::FileChooser>("Save YAD Kit...", juce::File(), "*.yadkit");
@@ -513,9 +512,8 @@ void DrumSimulatorAudioProcessorEditor::buttonClicked(juce::Button* button)
 void DrumSimulatorAudioProcessorEditor::showOutMenu(int drumIndex)
 {
 	juce::PopupMenu menu;
-	// Recuperiamo il puntatore alla voce per conoscere lo stato attuale
-	// Nota: assumiamo che nel Processor drumVoices sia accessibile o che ci sia un getter
-	// Per semplicità qui accediamo tramite un metodo che aggiungeremo dopo
+	// Retrieves the pointer to the voice to know its current state
+	// This assumes that drumVoices is accessible in the Processor or that there is a getter
 
 	int currentMode = audioProcessor.getRoutingMode(drumIndex);
 
@@ -542,7 +540,7 @@ void DrumSimulatorAudioProcessorEditor::sliderValueChanged(juce::Slider* /*slide
 
 void DrumSimulatorAudioProcessorEditor::openExtraArticulationDialog(int midiNote)
 {
-	// Usiamo un puntatore condiviso per l'AlertWindow in modo che non venga distrutta subito
+	// Use a shared pointer for the AlertWindow so that it is not destroyed immediately
 	auto w = std::make_shared<juce::AlertWindow>(
 		"Configure Articulation",
 		"Enter a short label (max 5 chars) for " + juce::MidiMessage::getMidiNoteName(midiNote, true, true, 3),
@@ -552,14 +550,14 @@ void DrumSimulatorAudioProcessorEditor::openExtraArticulationDialog(int midiNote
 	w->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
 	w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-	// Lanciamo la finestra in modo asincrono
+	// Launch the window asynchronously
 	w->enterModalState(true, juce::ModalCallbackFunction::create([this, w, midiNote](int result)
 		{
-			if (result == 1) // Se l'utente ha premuto OK
+			if (result == 1) // If the user pressed OK
 			{
 				juce::String newLabel = w->getTextEditorContents("label").substring(0, 5).toUpperCase();
 
-				// Logica per creare o aggiornare l'articolazione
+				// Logic to create or update the joint
 				if (audioProcessor.extraMap.find(midiNote) == audioProcessor.extraMap.end())
 				{
 					audioProcessor.extraMap[midiNote] = std::make_unique<ExtraArticulation>();
