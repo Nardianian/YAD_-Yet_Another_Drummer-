@@ -11,7 +11,12 @@ struct ExtraArticulation {
 	juce::String label;
 	std::unique_ptr<juce::AudioSampleBuffer> buffers[3]; // 3 Layer
 	juce::File sampleFiles[3];
-	float gain = 1.0f;
+	float gain = 1.0f;     // Volume Control
+	int outputBus = 0;    // 0 = Main, 1-4 = Extra Groups
+	bool isPlaying = false;
+	int currentSampleIndex = 0;
+	int activeLayerIndex = 0;
+	float triggerVelocity = 0.0f;
 };
 
 //==============================================================================
@@ -80,9 +85,11 @@ public:
 	void triggerDrum(int drumIndex, float velocity = 1.0f);
 	void loadSample(int drumIndex, const juce::File& file);
 	void loadSpecificLayer(int drumIndex, int layerIndex, const juce::File& file);
+	void clearDrumLayers(int drumIndex);
 	bool isDrumLoaded(int drumIndex) const;
 	juce::String getDrumName(int drumIndex) const;
 	void setRoutingMode(int index, int mode) { if (index >= 0 && index < NUM_SOUNDS) drumVoices[index].routingMode = mode; }
+
 	int getRoutingMode(int index) const { return (index >= 0 && index < NUM_SOUNDS) ? drumVoices[index].routingMode : 0; }
 	int getMidiNoteForPad(int index) const { return (index >= 0 && index < NUM_SOUNDS) ? midiNoteMapping[index] : -1; }
 	void saveFullKit(const juce::File& file);
@@ -109,7 +116,7 @@ private:
 		int currentSampleIndex = 0;
 		bool isPlaying = false;
 		float triggerVelocity = 0.0f;
-		int routingMode = 0; // If 0: Both, 1: Main Only, 2: Direct Only
+		int routingMode = 0; // 0: Both, 1: Solo Main, 2: Solo Direct
 		juce::String name;
 
 		void trigger(float vel)
