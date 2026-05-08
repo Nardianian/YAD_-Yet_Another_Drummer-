@@ -9,7 +9,7 @@ DrumSimulatorAudioProcessor::DrumSimulatorAudioProcessor()
 #if ! JucePlugin_IsSynth
 		.withInput("Input", juce::AudioChannelSet::stereo(), true)
 #endif
-		// Sostituiamo la vecchia uscita singola con Main + 8 uscite separate
+		// We replace the old single output with Main + 8 separate outputs
 		.withOutput("Main", juce::AudioChannelSet::stereo(), true)
 		.withOutput("Kick", juce::AudioChannelSet::mono(), true)
 		.withOutput("Snare", juce::AudioChannelSet::mono(), true)
@@ -34,11 +34,11 @@ DrumSimulatorAudioProcessor::DrumSimulatorAudioProcessor()
 			std::make_unique<juce::AudioParameterFloat>("ride_gain", "Ride Gain", 0.0f, 2.0f, 1.0f)
 		})
 {
-	// Record only Lossless / Professional formats
+	// We only record Lossless / Professional formats
 	formatManager.registerFormat(new juce::WavAudioFormat(), true);
 	formatManager.registerFormat(new juce::AiffAudioFormat(), false);
 	formatManager.registerFormat(new juce::FlacAudioFormat(), false);
-	// Note: does not record MP3 or Ogg
+	// Nota: Non registriamo MP3 o Ogg
 
 	// Setup drum names
 	setupDrumNames();
@@ -125,8 +125,8 @@ void DrumSimulatorAudioProcessor::changeProgramName(int index, const juce::Strin
 //==============================================================================
 void DrumSimulatorAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-	// The new layer system does not require specific preparation for each entry 
-	// (it reads directly from the buffers during the processBlock).
+	// The new layer system does not require specific preparation for each entry
+	// because we read directly from the buffers during the processBlock.
 	juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
@@ -146,8 +146,7 @@ bool DrumSimulatorAudioProcessor::isBusesLayoutSupported(const BusesLayout& layo
 	if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
 		return false;
 
-	// 2. We're lenient on the other buses: since we have a mix of Mono and Stereo,
-	// we let JUCE handle the manufacturer-defined compatibility.
+	// 2. On Other Bus: JUCE manages the compatibility defined in the constructor (since we have a mix of Mono and Stereo).
 	return true;
 #endif
 }
@@ -169,6 +168,44 @@ void DrumSimulatorAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
 	// Process drum voices
 	processDrumVoices(buffer);
+
+	int numExtraSamples = buffer.getNumSamples();
+	for (auto const& [note, artPtr] : extraMap)
+	{
+		auto& art = *artPtr;
+		if (!art.isPlaying || art.activeLayerIndex < 0) continue;
+
+		auto* buf = art.buffers[art.activeLayerIndex].get();
+		if (buf == nullptr) continue;
+
+		float effectiveGain = art.gain * art.triggerVelocity;
+		int sampleLength = buf->getNumSamples();
+		int sampleChannels = buf->getNumChannels();
+		int busIndex = art.outputBus;
+
+		for (int s = 0; s < numExtraSamples; ++s)
+		{
+			if (art.currentSampleIndex >= sampleLength) { art.isPlaying = false; break; }
+
+			for (int ch = 0; ch < 2; ++ch)
+			{
+				float val = buf->getSample(ch % sampleChannels, art.currentSampleIndex) * effectiveGain;
+
+				if (busIndex == 0)
+				{
+					buffer.addSample(ch, s, val);
+				}
+				else
+				{
+					int outputChannelIndex = 7 + busIndex;
+					auto outBus = getBusBuffer(buffer, false, 1);
+					if (outputChannelIndex < outBus.getNumChannels())
+						outBus.addSample(outputChannelIndex, s, val);
+				}
+			}
+			art.currentSampleIndex++;
+		}
+	}
 }
 
 //==============================================================================
@@ -225,7 +262,7 @@ void DrumSimulatorAudioProcessor::loadSample(int drumIndex, const juce::File& fi
 
 	if (reader != nullptr)
 	{
-		// If we load a single WAV file, we clean up the previous layers and create a single layer
+		// Se carichiamo un file WAV singolo, puliamo i layer precedenti e creiamo un layer unico
 		voice.layers.clear();
 
 		DrumLayer newLayer;
@@ -350,6 +387,7 @@ void DrumSimulatorAudioProcessor::setupDrumNames()
 void DrumSimulatorAudioProcessor::saveFullKit(const juce::File& file)
 {
 	juce::XmlElement xml("YAD_KIT");
+	juce::File kitFolder = file.getParentDirectory(); // La cartella dove risiede il file .yadkit
 
 	// 1. Standard Pad Save
 	auto* padsNode = xml.createNewChildElement("STANDARD_PADS");
@@ -359,7 +397,9 @@ void DrumSimulatorAudioProcessor::saveFullKit(const juce::File& file)
 		p->setAttribute("index", i);
 		for (int l = 0; l < 5; ++l)
 		{
-			p->setAttribute("file_layer_" + juce::String(l), multiLayerFiles[i][l].getFullPathName());
+			// Gets the relative path to the kit folder
+			juce::String relPath = kitFolder.getRelativePathFrom(multiLayerFiles[i][l]);
+			p->setAttribute("file_layer_" + juce::String(l), relPath);
 		}
 	}
 
@@ -370,9 +410,12 @@ void DrumSimulatorAudioProcessor::saveFullKit(const juce::File& file)
 		auto* e = extraNode->createNewChildElement("ARTICULATION");
 		e->setAttribute("midiNote", note);
 		e->setAttribute("label", art->label);
+		e->setAttribute("outputBus", art->outputBus);
+
 		for (int l = 0; l < 3; ++l)
 		{
-			e->setAttribute("file_layer_" + juce::String(l), art->sampleFiles[l].getFullPathName());
+			juce::String relPath = kitFolder.getRelativePathFrom(art->sampleFiles[l]);
+			e->setAttribute("file_layer_" + juce::String(l), relPath);
 		}
 	}
 
@@ -384,7 +427,9 @@ void DrumSimulatorAudioProcessor::loadFullKit(const juce::File& file)
 	auto xml = juce::XmlDocument::parse(file);
 	if (xml == nullptr || !xml->hasTagName("YAD_KIT")) return;
 
-	// 1. Pad Loading Standard
+	juce::File kitFolder = file.getParentDirectory();
+
+	// 1. Standard Pad Loading 
 	if (auto* padsNode = xml->getChildByName("STANDARD_PADS"))
 	{
 		for (auto* p : padsNode->getChildIterator())
@@ -392,14 +437,22 @@ void DrumSimulatorAudioProcessor::loadFullKit(const juce::File& file)
 			int idx = p->getIntAttribute("index");
 			for (int l = 0; l < 5; ++l)
 			{
-				juce::File f(p->getStringAttribute("file_layer_" + juce::String(l)));
-				if (f.existsAsFile()) loadSpecificLayer(idx, l, f);
+				juce::String relPath = p->getStringAttribute("file_layer_" + juce::String(l));
+				if (relPath.isNotEmpty())
+				{
+					// Rebuilds the absolute path starting from the current folder
+					juce::File f = kitFolder.getChildFile(relPath);
+					if (f.existsAsFile()) {
+						loadSpecificLayer(idx, l, f);
+						multiLayerFiles[idx][l] = f; // Update the reference
+					}
+				}
 			}
 		}
 	}
 
 	// 2. Extra Map Loading 
-	extraMap.clear(); // Let's clean up the current map
+	extraMap.clear();
 	if (auto* extraNode = xml->getChildByName("EXTRA_MAP"))
 	{
 		for (auto* e : extraNode->getChildIterator())
@@ -407,15 +460,19 @@ void DrumSimulatorAudioProcessor::loadFullKit(const juce::File& file)
 			int note = e->getIntAttribute("midiNote");
 			juce::String label = e->getStringAttribute("label");
 
-			// Let's create the Articulation
 			extraMap[note] = std::make_unique<ExtraArticulation>();
 			extraMap[note]->midiNote = note;
 			extraMap[note]->label = label;
+			extraMap[note]->outputBus = e->getIntAttribute("outputBus", 0);
 
 			for (int l = 0; l < 3; ++l)
 			{
-				juce::File f(e->getStringAttribute("file_layer_" + juce::String(l)));
-				if (f.existsAsFile()) loadExtraSample(note, l, f);
+				juce::String relPath = e->getStringAttribute("file_layer_" + juce::String(l));
+				if (relPath.isNotEmpty())
+				{
+					juce::File f = kitFolder.getChildFile(relPath);
+					if (f.existsAsFile()) loadExtraSample(note, l, f);
+				}
 			}
 		}
 	}
@@ -433,10 +490,11 @@ void DrumSimulatorAudioProcessor::loadSpecificLayer(int drumIndex, int layerInde
 		// 1. Save the path for future saving
 		multiLayerFiles[drumIndex][layerIndex] = file;
 
-		// 2. If it's the first layer keeps the other slots if exists
+		// 2. If this is the first layer we load, we clean up any old data
+		// (but keep any other manual slots if they exist)
 		if (voice.layers.size() > 5) voice.layers.clear();
 
-		// Ensures that the layers vector has at least 5 positions
+		// Make sure the layers vector has at least 5 positions
 		while (voice.layers.size() < 5) voice.layers.push_back(DrumLayer());
 
 		// 3. Load audio into the specific slot
@@ -445,7 +503,8 @@ void DrumSimulatorAudioProcessor::loadSpecificLayer(int drumIndex, int layerInde
 		reader->read(&layer.buffer, 0, (int)reader->lengthInSamples, 0, true, true);
 		layer.loaded = true;
 
-		// 4. Velocity Mapping (Automatic recalculation of dynamics)
+		// 4. Automatic recalculation of dynamics (Velocity Mapping)
+		// Let's count how many layers are actually loaded
 		int loadedCount = 0;
 		for (int i = 0; i < 5; ++i) if (voice.layers[i].loaded) loadedCount++;
 
@@ -465,7 +524,7 @@ void DrumSimulatorAudioProcessor::loadSpecificLayer(int drumIndex, int layerInde
 					currentLow += rangeSize;
 				}
 			}
-			// Fix to cover the entire range up to 127
+			// Covers the entire range up to 127
 			for (int i = 4; i >= 0; --i) {
 				if (voice.layers[i].loaded) {
 					voice.layers[i].highVel = 127;
@@ -481,17 +540,30 @@ void DrumSimulatorAudioProcessor::triggerExtra(int midiNote, float velocity)
 	auto it = extraMap.find(midiNote);
 	if (it == extraMap.end()) return;
 
-	// Determines the layer (0, 1 or 2) based on velocity
-	int layer = 0;
-	if (velocity > 0.4f) layer = 1;
-	if (velocity > 0.8f) layer = 2;
-
 	auto& art = *(it->second);
+
+	// Determine the layer based on velocity
+	int layer = 0;
+	if (velocity > 0.33f) layer = 1;
+	if (velocity > 0.66f) layer = 2;
+
+	// If the chosen layer is empty, search for the first available layer
+	if (art.buffers[layer] == nullptr || art.buffers[layer]->getNumSamples() == 0)
+	{
+		for (int l = 0; l < 3; ++l) {
+			if (art.buffers[l] != nullptr && art.buffers[l]->getNumSamples() > 0) {
+				layer = l;
+				break;
+			}
+		}
+	}
+
 	if (art.buffers[layer] != nullptr && art.buffers[layer]->getNumSamples() > 0)
 	{
-		// Note: We'd need some "Voice" logic here to handle the current sample index.
-		// For now, let's make a logical trigger: in a real drum machine, extra articulations typically use a dynamic voice system. 
-		// We'll look at the playhead implementation in the next step.
+		art.activeLayerIndex = layer;
+		art.currentSampleIndex = 0;
+		art.triggerVelocity = velocity;
+		art.isPlaying = true;
 	}
 }
 
@@ -507,6 +579,26 @@ void DrumSimulatorAudioProcessor::loadExtraSample(int midiNote, int layer, const
 		art->buffers[layer] = std::make_unique<juce::AudioSampleBuffer>((int)reader->numChannels, (int)reader->lengthInSamples);
 		reader->read(art->buffers[layer].get(), 0, (int)reader->lengthInSamples, 0, true, true);
 		art->sampleFiles[layer] = file;
+	}
+}
+
+void DrumSimulatorAudioProcessor::clearDrumLayers(int drumIndex)
+{
+	if (drumIndex >= 0 && drumIndex < NUM_SOUNDS)
+	{
+		auto& voice = drumVoices[drumIndex];
+		voice.stop();
+
+		// Clear the buffers of each layer
+		for (auto& layer : voice.layers)
+		{
+			layer.buffer.setSize(0, 0);
+			layer.loaded = false;
+		}
+
+		// Clear file references
+		for (int i = 0; i < 5; ++i)
+			multiLayerFiles[drumIndex][i] = juce::File();
 	}
 }
 
